@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="description" content="Contractor Bill Manager - company, bills and payments">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<title>Contractor Bill Manager</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f1f5f9;color:#0f172a}
+header{background:#0f172a;color:#fff;padding:18px 16px 16px;position:sticky;top:0;z-index:5}
+header h1{margin:0;font-size:21px}header p{margin:4px 0 0;color:#cbd5e1;font-size:13px}
+main{max-width:900px;margin:auto;padding:14px 12px 90px}
+.cards{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
+.card{background:#fff;border-radius:14px;padding:14px;box-shadow:0 2px 10px #0000000d}.card small{color:#64748b}.amount{font-size:21px;font-weight:750;margin-top:5px}
+.tabs{display:flex;gap:8px;overflow:auto;margin-bottom:12px}.tab{border:0;background:#e2e8f0;padding:10px 14px;border-radius:999px;font-weight:650;white-space:nowrap}.tab.active{background:#0f172a;color:white}
+.panel{background:#fff;border-radius:14px;padding:14px;margin-bottom:12px}.panel h2{font-size:17px;margin:0 0 12px}
+label{display:block;font-size:13px;font-weight:650;color:#475569;margin:9px 0 5px}
+input,select,button{font:inherit}input,select{width:100%;padding:11px;border:1px solid #cbd5e1;border-radius:10px;background:#fff}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.btn{width:100%;padding:11px;border:0;border-radius:10px;background:#0f172a;color:#fff;font-weight:700;margin-top:12px}.btn.secondary{background:#e2e8f0;color:#0f172a}.btn.danger{background:#fee2e2;color:#991b1b}
+.list{display:grid;gap:9px}.item{border:1px solid #e2e8f0;border-radius:12px;padding:12px}.itemtop{display:flex;justify-content:space-between;gap:8px}.item b{font-size:15px}.muted{color:#64748b;font-size:12px}.pill{padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#dcfce7;color:#166534}.pill.pending{background:#fef3c7;color:#92400e}
+.actions{display:flex;gap:7px;margin-top:9px}.actions button{flex:1;padding:8px;border:0;border-radius:8px;background:#e2e8f0}.empty{text-align:center;color:#64748b;padding:22px}
+.hidden{display:none!important}.footer{text-align:center;color:#94a3b8;font-size:11px;padding:15px}
+@media(min-width:650px){.cards{grid-template-columns:repeat(4,1fr)}}
+</style>
+</head>
+<body>
+<header><h1>Contractor Bill Manager</h1><p>Company • Bill • Payment • Pending</p></header>
+<main>
+<section class="cards">
+<div class="card"><small>Total Billing</small><div class="amount" id="totalBilling">₹0</div></div>
+<div class="card"><small>Received</small><div class="amount" id="totalReceived">₹0</div></div>
+<div class="card"><small>Pending</small><div class="amount" id="totalPending">₹0</div></div>
+<div class="card"><small>Total Bills</small><div class="amount" id="totalBills">0</div></div>
+</section>
+
+<div class="tabs">
+<button class="tab active" data-tab="dashboard">Dashboard</button>
+<button class="tab" data-tab="bill">Add Bill</button>
+<button class="tab" data-tab="payment">Payment</button>
+<button class="tab" data-tab="companies">Companies</button>
+</div>
+
+<section id="dashboard" class="panel tabpage">
+<h2>Pending / Recent Bills</h2>
+<input id="search" placeholder="Bill no. ya company search karein">
+<div id="billList" class="list" style="margin-top:10px"></div>
+</section>
+
+<section id="bill" class="panel tabpage hidden">
+<h2>New Bill</h2>
+<label>Company</label><input id="billCompany" placeholder="Company ka naam">
+<div class="row"><div><label>Bill Number</label><input id="billNo" placeholder="B-001"></div><div><label>Bill Date</label><input id="billDate" type="date"></div></div>
+<label>Bill Amount</label><input id="billAmount" type="number" min="0" placeholder="0">
+<button class="btn" onclick="addBill()">Save Bill</button>
+</section>
+
+<section id="payment" class="panel tabpage hidden">
+<h2>Payment Entry</h2>
+<label>Bill</label><select id="paymentBill"></select>
+<div class="row"><div><label>Payment Amount</label><input id="paymentAmount" type="number" min="0" placeholder="0"></div><div><label>Payment Date</label><input id="paymentDate" type="date"></div></div>
+<label>Transaction / Reference No.</label><input id="paymentRef" placeholder="Optional">
+<button class="btn" onclick="addPayment()">Save Payment</button>
+</section>
+
+<section id="companies" class="panel tabpage hidden">
+<h2>Company-wise Dashboard</h2>
+<div id="companyList" class="list"></div>
+</section>
+
+<div class="panel">
+<h2>Backup</h2>
+<div class="row"><button class="btn secondary" onclick="exportData()">Export Data</button><button class="btn secondary" onclick="document.getElementById('importFile').click()">Import Data</button></div>
+<input id="importFile" type="file" accept=".json" class="hidden" onchange="importData(event)">
+<button class="btn danger" onclick="clearData()">Delete All Data</button>
+</div>
+<div class="footer">Data is stored locally on this phone/browser.</div>
+</main>
+
+<script>
+const KEY='contractorBillManager_v1';
+let data=JSON.parse(localStorage.getItem(KEY)||'{"bills":[],"payments":[]}');
+const money=n=>'₹'+Number(n||0).toLocaleString('en-IN');
+const save=()=>{localStorage.setItem(KEY,JSON.stringify(data));render()};
+const today=()=>new Date().toISOString().slice(0,10);
+document.getElementById('billDate').value=today();document.getElementById('paymentDate').value=today();
+
+function billReceived(id){return data.payments.filter(p=>p.billId===id).reduce((s,p)=>s+Number(p.amount),0)}
+function render(){
+ let billing=data.bills.reduce((s,b)=>s+Number(b.amount),0), received=data.payments.reduce((s,p)=>s+Number(p.amount),0);
+ totalBilling.textContent=money(billing);totalReceived.textContent=money(received);totalPending.textContent=money(billing-received);totalBills.textContent=data.bills.length;
+ renderBills();renderPaymentsSelect();renderCompanies();
+}
+function renderBills(){
+ const q=(search.value||'').toLowerCase();let bs=data.bills.filter(b=>(b.company+' '+b.no).toLowerCase().includes(q)).slice().reverse();
+ billList.innerHTML=bs.length?bs.map(b=>{let r=billReceived(b.id),p=Number(b.amount)-r;return `<div class="item"><div class="itemtop"><div><b>${esc(b.company)}</b><div class="muted">Bill No: ${esc(b.no)} • ${b.date||''}</div></div><span class="pill ${p>0?'pending':''}">${p>0?'Pending':'Paid'}</span></div><div style="margin-top:8px"><b>${money(b.amount)}</b> &nbsp; Received ${money(r)} &nbsp; <span class="muted">Pending ${money(p)}</span></div><div class="actions"><button onclick="viewPayments('${b.id}')">Payments</button><button onclick="deleteBill('${b.id}')">Delete</button></div></div>`}).join(''):'<div class="empty">Abhi koi bill nahi hai.</div>';
+}
+function renderPaymentsSelect(){
+ paymentBill.innerHTML=data.bills.length?data.bills.map(b=>{let p=Number(b.amount)-billReceived(b.id);return `<option value="${b.id}">${esc(b.company)} — ${esc(b.no)} — Pending ${money(p)}</option>`}).join(''):'<option value="">Pehle bill add karein</option>';
+}
+function renderCompanies(){
+ let map={};data.bills.forEach(b=>{map[b.company]=map[b.company]||{billing:0,received:0,bills:0};map[b.company].billing+=Number(b.amount);map[b.company].received+=billReceived(b.id);map[b.company].bills++});
+ let arr=Object.entries(map);companyList.innerHTML=arr.length?arr.map(([c,x])=>`<div class="item"><b>${esc(c)}</b><div class="muted">${x.bills} bills</div><div style="margin-top:7px">Billing <b>${money(x.billing)}</b> • Received <b>${money(x.received)}</b> • Pending <b>${money(x.billing-x.received)}</b></div></div>`).join(''):'<div class="empty">Company data yahan dikhega.</div>';
+}
+function addBill(){
+ let company=billCompany.value.trim(),no=billNo.value.trim(),amount=Number(billAmount.value);
+ if(!company||!no||!amount)return alert('Company, Bill Number aur Bill Amount bhariye.');
+ data.bills.push({id:crypto.randomUUID(),company,no,date:billDate.value,amount});billCompany.value='';billNo.value='';billAmount.value='';save();switchTab('dashboard');alert('Bill save ho gaya.');
+}
+function addPayment(){
+ let billId=paymentBill.value,amount=Number(paymentAmount.value);
+ if(!billId||!amount)return alert('Bill aur payment amount select karein.');
+ let b=data.bills.find(x=>x.id===billId),pending=Number(b.amount)-billReceived(billId);
+ if(amount>pending)return alert('Payment pending amount se zyada hai.');
+ data.payments.push({id:crypto.randomUUID(),billId,amount,date:paymentDate.value,ref:paymentRef.value.trim()});paymentAmount.value='';paymentRef.value='';save();switchTab('dashboard');alert('Payment save ho gaya.');
+}
+function viewPayments(id){
+ let b=data.bills.find(x=>x.id===id), ps=data.payments.filter(p=>p.billId===id);
+ alert('Bill '+b.no+'\n'+(ps.length?ps.map(p=>p.date+' | '+money(p.amount)+(p.ref?' | '+p.ref:'')).join('\n'):'No payments yet'));
+}
+function deleteBill(id){if(confirm('Is bill ko delete karein?')){data.bills=data.bills.filter(b=>b.id!==id);data.payments=data.payments.filter(p=>p.billId!==id);save()}}
+function exportData(){let blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='contractor-bill-backup.json';a.click()}
+function importData(e){let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let x=JSON.parse(r.result);if(!x.bills||!x.payments)throw 0;data=x;save();alert('Data import ho gaya.')}catch{alert('Invalid backup file')}};r.readAsText(f)}
+function clearData(){if(confirm('Saara data delete ho jayega. Continue?')){data={bills:[],payments:[]};save()}}
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function switchTab(t){document.querySelectorAll('.tabpage').forEach(x=>x.classList.add('hidden'));document.getElementById(t).classList.remove('hidden');document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===t))}
+document.querySelectorAll('.tab').forEach(x=>x.onclick=()=>switchTab(x.dataset.tab));search.oninput=renderBills;
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+render();
+</script>
+</body></html>
